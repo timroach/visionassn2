@@ -49,31 +49,53 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     # ===== 2/ use bruteforce search to find a list of pairs of matched feature points
     # ==============================
     list_pairs_matched_keypoints = []
-    allpoints = {}
-    for outerpoint, outerdesc in zip(img_1_keypoints, img_1_desc):
-        allpoints[outerpoint] = []
-        for innerpoint, innerdesc in zip(img_2_keypoints, img_2_desc):
-            comparison = np.equal(outerdesc, innerdesc)
-            agreed = np.sum(comparison)
-            outerxy = outerpoint.pt
-            innerxy = innerpoint.pt
-            dist = math.sqrt((outerxy[0] - innerxy[0])**2 + (outerxy[1] - innerxy[1])**2)
-            allpoints[outerpoint].append((innerpoint, dist))
-        inorder = sorted(allpoints[outerpoint], key= lambda x: x[1])
+    allpoints = []
+
+    for outerindex, (outerpoint, outerdesc) in enumerate(zip(img_1_keypoints, img_1_desc)):
+        diffmatrix = outerdesc - img_2_desc
+        distances = np.linalg.norm(diffmatrix, axis=1)
+        kpwithdistance = np.column_stack((img_2_keypoints, distances))
+        sortwdist = kpwithdistance[kpwithdistance[:,1].argsort()]
+        toptwo = sortwdist[:2]
+        if len(toptwo) > 1:
+            firstdist = toptwo[0][1]
+            seconddist = toptwo[1][1]
+            if firstdist < seconddist * ratio_robustness:
+                allpoints.append([[outerpoint, outerindex], toptwo[0]])
+        '''
+        outerlist = []
+        for innerindex, (innerpoint, innerdesc) in enumerate(zip(img_2_keypoints, img_2_desc)):
+            difference = outerdesc - innerdesc
+            distance = np.linalg.norm(difference)
+            outerlist.append((innerpoint, distance, innerindex))
+        inorder = sorted(outerlist[1:], key= lambda x: x[1])
         nporder = np.asarray(inorder)
-        ratio = np.divide(nporder[0][1], nporder[:,1] )
-        minratio = ratio[ratio >= ratio_robustness]
-        truncated = nporder[:len(minratio)]
-        allpoints[outerpoint] = truncated
-    print("test")
+        toptwo = nporder[:2]
+        if len(toptwo) > 1:
+            topdist = toptwo[0][2]
+            seconddist = toptwo[1][2]
+            ratio = topdist / seconddist
+            if topdist < (seconddist * ratio_robustness):
+                allpoints.append([[outerpoint, outerindex], toptwo[0]])
+        '''
+    bestpairs = []
+    for tuple in allpoints:
+        queryldx = tuple[0][1]
+        trainldx = tuple[1][1]
+        matchlist = tuple[1]
+        tupdistance = tuple[1][1]
+        source = cv2.DMatch(queryldx, trainldx, tupdistance)
+        best = [tuple[0], tuple[1]]
+        bestpairs.append([source])
+        # print("test")
     # to be completed ....
     bf = cv2.BFMatcher()
     opencvpairs = bf.knnMatch(img_1_desc, img_2_desc, k=2)
-    goodcvpairs = []
+    bestpairscv = []
     for m, n in opencvpairs:
         if m.distance < ratio_robustness*n.distance:
-            goodcvpairs.append([m])
-    img_match_lines = cv2.drawMatchesKnn(img_1, img_1_keypoints, img_2, img_2_keypoints, goodcvpairs, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            bestpairscv.append([m])
+    img_match_lines = cv2.drawMatchesKnn(img_1, img_1_keypoints, img_2, img_2_keypoints, bestpairscv, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img_match_lines),plt.show()
     return list_pairs_matched_keypoints
 
