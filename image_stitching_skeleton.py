@@ -54,49 +54,43 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     for outerindex, (outerpoint, outerdesc) in enumerate(zip(img_1_keypoints, img_1_desc)):
         diffmatrix = outerdesc - img_2_desc
         distances = np.linalg.norm(diffmatrix, axis=1)
-        kpwithdistance = np.column_stack((img_2_keypoints, distances))
+        kpwithdistance = np.column_stack((img_2_keypoints, distances, range(0, len(img_2_keypoints))))
         sortwdist = kpwithdistance[kpwithdistance[:,1].argsort()]
         toptwo = sortwdist[:2]
         if len(toptwo) > 1:
+            # firstpoint = toptwo[0][0]
             firstdist = toptwo[0][1]
             seconddist = toptwo[1][1]
             if firstdist < seconddist * ratio_robustness:
                 allpoints.append([[outerpoint, outerindex], toptwo[0]])
-        '''
-        outerlist = []
-        for innerindex, (innerpoint, innerdesc) in enumerate(zip(img_2_keypoints, img_2_desc)):
-            difference = outerdesc - innerdesc
-            distance = np.linalg.norm(difference)
-            outerlist.append((innerpoint, distance, innerindex))
-        inorder = sorted(outerlist[1:], key= lambda x: x[1])
-        nporder = np.asarray(inorder)
-        toptwo = nporder[:2]
-        if len(toptwo) > 1:
-            topdist = toptwo[0][2]
-            seconddist = toptwo[1][2]
-            ratio = topdist / seconddist
-            if topdist < (seconddist * ratio_robustness):
-                allpoints.append([[outerpoint, outerindex], toptwo[0]])
-        '''
+
+    # Debugging with cv2
+    '''
     bestpairs = []
     for tuple in allpoints:
         queryldx = tuple[0][1]
-        trainldx = tuple[1][1]
+        trainldx = tuple[1][2]
         matchlist = tuple[1]
         tupdistance = tuple[1][1]
         source = cv2.DMatch(queryldx, trainldx, tupdistance)
         best = [tuple[0], tuple[1]]
         bestpairs.append([source])
         # print("test")
-    # to be completed ....
     bf = cv2.BFMatcher()
     opencvpairs = bf.knnMatch(img_1_desc, img_2_desc, k=2)
     bestpairscv = []
     for m, n in opencvpairs:
         if m.distance < ratio_robustness*n.distance:
             bestpairscv.append([m])
-    img_match_lines = cv2.drawMatchesKnn(img_1, img_1_keypoints, img_2, img_2_keypoints, bestpairscv, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    img_match_lines = cv2.drawMatchesKnn(img_1, img_1_keypoints, img_2, img_2_keypoints, bestpairs, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img_match_lines),plt.show()
+    '''
+
+    for item in allpoints:
+        point1 = item[0][0].pt
+        point2 = item[1][0].pt
+        list_pairs_matched_keypoints.append([[point1[0], point1[1]],
+                                            [point2[0], point2[1]]])
     return list_pairs_matched_keypoints
 
 def ex_warp_blend_crop_image(img_1,H_1,img_2):
