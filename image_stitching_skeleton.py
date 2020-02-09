@@ -4,6 +4,18 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
+
+def homog(point):
+    appended = point.copy()
+    appended.append(1)
+    npvec = np.array(appended)
+    return npvec
+
+def linear(homogpoint):
+    x = homogpoint[0] / homogpoint[2]
+    y = homogpoint[1] / homogpoint[2]
+    return np.array([x, y])
+
 def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inliers=0.85, threshold_reprojtion_error=3, max_num_trial=1000):
     '''
     Apply RANSAC algorithm to find a homography transformation matrix that align 2 sets of feature points, transform the first set of feature point to the second (e.g. warp image 1 to image 2)
@@ -13,10 +25,82 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
     :param max_num_trial: the maximum number of trials to do take sample and do testing to find the best homography matrix
     :return best_H: the best found homography matrix
     '''
+    def find4homo(pointslist):
+        '''
+        point1 = pointslist[0]
+        point2 = pointslist[1]
+        point3 = pointslist[2]
+        point4 = pointslist[3]
+        x1 = point1[0][0]
+        y1 = point1[0][1]
+        xp1 = point1[1][0]
+        yp1 = point1[1][1]
+        x2 = point2[0][0]
+        y2 = point2[0][1]
+        xp2 = point2[1][0]
+        yp2 = point2[1][1]
+        x3 = point3[0][0]
+        y3 = point3[0][1]
+        xp3 = point3[1][0]
+        yp3 = point3[1][1]
+        x4 = point4[0][0]
+        y4 = point4[0][1]
+        xp4 = point4[1][0]
+        yp4 = point4[1][1]
+        Aarray = np.array([
+                        [-x1,   -y1,    -1,     0,      0,      0,      x1*xp1,     y1*xp1,     xp1],
+                        [0,     0,      0,      -x1,    -y1,    -1,     x1*yp1,     y1*yp1,     yp1],
+                        [-x2,   -y2,    -1,     0,      0,      0,      x2*xp2,     y2*xp2,     xp2],
+                        [0,     0,      0,      -x2,    -y2,    -1,     x2*yp2,     y2*yp2,     yp2],
+                        [-x3,   -y3,    -1,     0,      0,      0,      x3*xp3,     y3*xp3,     xp3],
+                        [0,     0,      0,      -x3,    -y3,    -1,     x3*yp3,     y3*yp3,     yp3],
+                        [-x4,   -y4,    -1,     0,      0,      0,      x4*xp4,     y4*xp4,     xp4],
+                        [ 0,    0,      0,      -x4,    -y4,    -1,     x4*yp4,     y4*yp4,     yp4]])
+        U, S, testsvd = np.linalg.svd(Aarray, full_matrices=True)
+        values = testsvd[:,8]
+        values = np.reshape(values, (3,3))
+        '''
+        A = []
+        for i in range(0, len(pointslist)):
+            x, y = pointslist[i][0][0], pointslist[i][0][1]
+            u, v = pointslist[i][1][0], pointslist[i][1][1]
+            A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
+            A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+        A = np.asarray(A)
+        U, S, Vh = np.linalg.svd(A)
+        L = Vh[-1, :] / Vh[-1, -1]
+        H = L.reshape(3, 3)
+        return H
+
+    def findinliners(H, keypoints):
+        inliernum = 0
+        for (point1, point2) in keypoints:
+            p1homog = homog(point1)
+            predicted = H @ p1homog
+            predicted2 = p1homog @ H
+            linpredicted = linear(predicted)
+            difference = point2 - linpredicted
+            difference2 = point2 - linear(predicted2)
+            error = np.linalg.norm(point2 - linpredicted)
+            if error < threshold_reprojtion_error:
+                inliernum += 1
+            # print("test")
+        return inliernum
+
+    H_array = []
     best_H = None
-
-    # to be completed ...
-
+    for trial in range(0, max_num_trial):
+        kps = np.array(list_pairs_matched_keypoints)
+        randomfour = kps[np.random.choice(kps.shape[0], 4)]
+        trialH = find4homo(randomfour.tolist())
+        totalinliners = 0
+        inliners = findinliners(trialH, list_pairs_matched_keypoints)
+        if inliners / len(list_pairs_matched_keypoints) > threshold_ratio_inliers:
+            H_array.append([trialH, inliners])
+        totalinliners += inliners
+    H_arr_np = np.array(H_array)
+    H_arraysorted = H_arr_np[H_arr_np[:,1].argsort()]
+    best_H = H_arraysorted[-1][0]
     return best_H
 
 def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
@@ -43,7 +127,9 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     sift = cv2.xfeatures2d.SIFT_create()
     img_1_keypoints, img_1_desc = sift.detectAndCompute(img_1_gray, None)
     img_2_keypoints, img_2_desc = sift.detectAndCompute(img_2_gray, None)
-    write_out(img_1, img_1_keypoints, img_2, img_2_keypoints)
+
+
+    #write_out(img_1, img_1_keypoints, img_2, img_2_keypoints)
 
     # ==============================
     # ===== 2/ use bruteforce search to find a list of pairs of matched feature points
@@ -93,7 +179,7 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
                                             [point2[0], point2[1]]])
     return list_pairs_matched_keypoints
 
-def ex_warp_blend_crop_image(img_1,H_1,img_2):
+def ex_warp_blend_crop_image(img_1, H_1, img_2):
     '''
     1/ warp image img_1 using the homography H_1 to align it with image img_2 (using backward warping and bilinear resampling)
     2/ stitch image img_1 to image img_2 and apply average blending to blend the 2 images into a single panorama image
@@ -103,7 +189,12 @@ def ex_warp_blend_crop_image(img_1,H_1,img_2):
     :param img_2:
     :return img_panorama: resulting panorama image
     '''
-    img_panorama = None
+    invH = np.linalg.inv(H_1)
+    img_dims = img_1.shape
+    img_panorama = np.zeros(shape=(3 * img_dims[0], 3 * img_dims[1], img_dims[2]), dtype=np.uint8)
+    img_panorama[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_1
+    plt.imshow(img_panorama),plt.show()
+    print("test")
     # =====  use a backward warping algorithm to warp the source
     # 1/ to do so, we first create the inverse transform; 2/ use bilinear interpolation for resampling
     # to be completed ...
