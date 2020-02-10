@@ -12,6 +12,8 @@ def homog(point):
     return npvec
 
 def linear(homogpoint):
+    if homogpoint[2] == 0:
+        homogpoint[2] = 0.0000001
     x = homogpoint[0] / homogpoint[2]
     y = homogpoint[1] / homogpoint[2]
     return np.array([x, y])
@@ -116,6 +118,7 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     # ==============================
     # ===== 1/ extract features from input image 1 and image 2
     # ==============================
+
     def write_out(im1, keypoints1, im2, keypoints2):
         img_1_output = cv2.drawKeypoints(cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY), keypoints1, im1)
         img_2_output = cv2.drawKeypoints(cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY), keypoints2, im2)
@@ -192,9 +195,74 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     invH = np.linalg.inv(H_1)
     img_dims = img_1.shape
     img_panorama = np.zeros(shape=(3 * img_dims[0], 3 * img_dims[1], img_dims[2]), dtype=np.uint8)
-    img_panorama[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_1
-    plt.imshow(img_panorama),plt.show()
-    print("test")
+    # img_panorama[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_1
+    warpedpixels = {}
+    def one2fourbilin(pixel, rgb):
+        i = math.floor(pixel[0])
+        j = math.floor(pixel[1])
+        dx = pixel[0] - i
+        dy = pixel[1] - j
+        ll = (dx * dy) * rgb
+        lr = ((1 - dx)*dy) * rgb
+        ur = ((1 - dx) * (1 - dy)) * rgb
+        ul = (dx * (1 - dy)) * rgb
+        locations = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]
+        locint = np.array(locations, dtype=int)
+        pixvalues = np.array([ll, lr, ur, ul])
+        result = np.column_stack((locint, pixvalues))
+        return result
+    def four2onebilin(pixel, rgb):
+
+    img_1_width = img_1.shape[0]
+    img_1_height = img_1.shape[1]
+    for xindex, row in enumerate(img_panorama):
+        for yindex, pixel in enumerate(row):
+            pixhomo = homog([xindex, yindex])
+            pixhomowarped = invH @ pixhomo
+            pixsrc = linear(pixhomowarped)
+            srcx = pixsrc[0]
+            srcy = pixsrc[1]
+            if 0 < srcx < img_1_width and 0 < srcy < img_1_width:
+
+                print("test")
+            else:
+                print("out of range")
+    '''
+    for xindex, row in enumerate(img_1):
+        for yindex, pixel in enumerate(row):
+            pixhomo = homog([xindex, yindex])
+            newlochomo = invH @ pixhomo
+            newloc = linear(newlochomo)
+            bilinto4 = one2fourbilin(newloc, pixel)
+            # locpixlist = [newloc, pixel]
+            for line in bilinto4:
+                loc = line[0:2].astype(int)
+                loctup = (loc[0], loc[1])
+                rgb = line[2:]
+                if loctup not in warpedpixels:
+                    warpedpixels[loctup] = [rgb]
+                else:
+                    warpedpixels[loctup].append(rgb)
+            #print("test")
+    warpedmean = {}
+    for fracpixels in warpedpixels.items():
+        unpacked = fracpixels[1]
+        if len(unpacked) > 1:
+            stacked = np.stack(unpacked, axis=1)
+            stacked = stacked.mean(axis=1)
+            warpedmean[fracpixels[0]] = stacked
+        else:
+            aslist = unpacked[0].tolist()
+            warpedmean[fracpixels[0]] = np.array(aslist)
+        #print("test")
+    for coords, pixel in warpedmean.items():
+        x = coords[0]
+        y = coords[1]
+        img_panorama[x,y] = pixel
+        print("test")
+    '''
+    plt.imshow(cv2.cvtColor(img_panorama, cv2.COLOR_BGR2RGB)),plt.show()
+
     # =====  use a backward warping algorithm to warp the source
     # 1/ to do so, we first create the inverse transform; 2/ use bilinear interpolation for resampling
     # to be completed ...
@@ -242,6 +310,8 @@ if __name__ == "__main__":
     # ===== read 2 input images
 
     img_1 = cv2.imread(path_file_image_1)
+    # plt.imshow(cv2.cvtColor(img_1, cv2.COLOR_BGR2RGB)),plt.show()
+
     img_2 = cv2.imread(path_file_image_2)
 
     # ===== create a panorama image by stitch image 1 to image 2
