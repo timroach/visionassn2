@@ -64,8 +64,8 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
         '''
         A = []
         for i in range(0, len(pointslist)):
-            x1, y1 = pointslist[i][0][0], pointslist[i][0][1]
-            xp1, yp1 = pointslist[i][1][0], pointslist[i][1][1]
+            x1, y1 = pointslist[i][0]
+            xp1, yp1 = pointslist[i][1]
             # A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
             # A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
             A.append([-x1, -y1, -1, 0, 0, 0, x1*xp1, y1*xp1, xp1])
@@ -79,13 +79,14 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
     def findinliners(H, keypoints):
         inliernum = 0
         for (point1, point2) in keypoints:
+            # Homog coords of point 1
             p1homog = homog(point1)
+            # Homog coords of predicted point 2
             predicted = H @ p1homog
-            predicted2 = p1homog @ H
-            linpredicted = linear(predicted)
-            difference = point2 - linpredicted
-            difference2 = point2 - linear(predicted2)
-            error = np.linalg.norm(point2 - linpredicted)
+            # Standard coords of predicted point
+            standardpredicted = linear(predicted)
+            difference = point2 - standardpredicted
+            error = np.linalg.norm(point2 - standardpredicted)
             if error < threshold_reprojtion_error:
                 inliernum += 1
             # print("test")
@@ -94,8 +95,13 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
     H_array = []
     best_H = None
     for trial in range(0, max_num_trial):
+        # Array coord pairs, 2 pair for each keypoint
         kps = np.array(list_pairs_matched_keypoints)
+        # 4 random pairs from the list
         randomfour = kps[np.random.choice(kps.shape[0], 4)]
+        # Random 4 arranged as nested list for function
+        listfour = [randomfour[0].tolist(), randomfour[1].tolist(), randomfour[2].tolist(), randomfour[3].tolist()]
+        # Calculate homography matrix from 4 pairs of points
         trialH = find4homo(randomfour.tolist())
         totalinliners = 0
         inliners = findinliners(trialH, list_pairs_matched_keypoints)
@@ -142,10 +148,13 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     list_pairs_matched_keypoints = []
     allpoints = []
 
+    # For each keypoint and description in image 1...
     for outerindex, (outerpoint, outerdesc) in enumerate(zip(img_1_keypoints, img_1_desc)):
         diffmatrix = outerdesc - img_2_desc
+        testdist = np.linalg.norm(outerdesc - img_2_desc[0])
         distances = np.linalg.norm(diffmatrix, axis=1)
         kpwithdistance = np.column_stack((img_2_keypoints, distances, range(0, len(img_2_keypoints))))
+        # testsort = np.sort(kpwithdistance, axis=0)
         sortwdist = kpwithdistance[kpwithdistance[:,1].argsort()]
         toptwo = sortwdist[:2]
         if len(toptwo) > 1:
@@ -155,8 +164,8 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
             if firstdist < seconddist * ratio_robustness:
                 allpoints.append([[outerpoint, outerindex], toptwo[0]])
 
-    # Debugging with cv2
-    '''
+
+
     bestpairs = []
     for tuple in allpoints:
         queryldx = tuple[0][1]
@@ -167,21 +176,23 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
         best = [tuple[0], tuple[1]]
         bestpairs.append([source])
         # print("test")
+
+    # Debugging with cv2
+    '''
     bf = cv2.BFMatcher()
     opencvpairs = bf.knnMatch(img_1_desc, img_2_desc, k=2)
     bestpairscv = []
     for m, n in opencvpairs:
         if m.distance < ratio_robustness*n.distance:
             bestpairscv.append([m])
+    
     img_match_lines = cv2.drawMatchesKnn(img_1, img_1_keypoints, img_2, img_2_keypoints, bestpairs, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
     plt.imshow(img_match_lines),plt.show()
     '''
-
-    for item in allpoints:
-        point1 = item[0][0].pt
-        point2 = item[1][0].pt
-        list_pairs_matched_keypoints.append([[point1[0], point1[1]],
-                                            [point2[0], point2[1]]])
+    for keypoint1, keypoint2 in allpoints:
+        point1 = keypoint1[0].pt
+        point2 = keypoint2[0].pt
+        list_pairs_matched_keypoints.append([[point1[0], point1[1]],[point2[0], point2[1]]])
     return list_pairs_matched_keypoints
 
 def ex_warp_blend_crop_image(img_1, H_1, img_2):
@@ -199,7 +210,9 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     img_panorama = np.zeros(shape=(3 * img_dims[0], 3 * img_dims[1], img_dims[2]), dtype=np.uint8)
     img_pano_height = img_panorama.shape[1]
     img_pano_width = img_panorama.shape[0]
-    # img_panorama[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_1
+    img_pano_1 = img_panorama.copy()
+    img_pano_2 = img_panorama.copy()
+    img_pano_2[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_2
     warpedpixels = {}
     def one2fourbilin(pixel, rgb):
         i = math.floor(pixel[0])
@@ -216,6 +229,8 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
         result = np.column_stack((locint, pixvalues))
         return result
 
+    # Compute pixel's color from it's 4 neighbors
+    # via bilinear interpolation
     def four2onebilin(pixel, image):
         i = math.floor(pixel[0])
         j = math.floor(pixel[1])
@@ -242,11 +257,9 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
             # pano coords in homogenous space
             pixhomo = homog([xindex, yindex])
             # Source coords in img_1 (homogenous)
-            pixhomowarped = invH @ pixhomo
-            scaling = np.array(([1, 0, 0],
-                                    [0, 1, 0],
-                                    [0, 0, 1]))
-            pixhomowarped1 = scaling @ pixhomo
+            pixhomowarped = np.dot(invH, pixhomo)
+            # scaling = np.array(([1, 0, 0], [0, 1, 0],[0, 0, 1]))
+            # pixhomowarped1 = scaling @ pixhomo
             # Linear coords in img_1
             pixsrc = linear(pixhomowarped)
             # x coord in img_1
@@ -262,7 +275,7 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
                 targetcoords = [xindex + img_1_width, yindex + img_1_height]
                 targetpixel = img_panorama[xindex + img_1_width][yindex + img_1_height]
                 # Alter color of current pixel in pano, + offset
-                img_panorama[xindex + img_1_height][yindex + img_1_width] = colorvalue
+                img_pano_1[xindex + img_1_height][yindex + img_1_width] += colorvalue.astype(np.uint8)
                 #print("test")
             # else:
                 # print("out of range")
@@ -300,7 +313,42 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
         img_panorama[x,y] = pixel
         print("test")
     '''
-    plt.imshow(cv2.cvtColor(img_panorama, cv2.COLOR_BGR2RGB)),plt.show()
+    # Masking
+    def mask(image):
+        result = np.zeros(image.shape)
+        for xindex, row in enumerate(image):
+            for yindex, pixel in enumerate(row):
+                if np.any(np.greater(pixel, 0)):
+                    result[xindex][yindex] = [1, 1, 1]
+        return result
+
+    def crop(image):
+        xvals = []
+        yvals = []
+        for xindex, row in enumerate(image):
+            for yindex, pixel in enumerate(row):
+                if np.any(np.greater(pixel, 0)):
+                    xvals.append(xindex)
+                    yvals.append(yindex)
+        xvals.sort()
+        yvals.sort()
+        xmin, xmax = xvals[0], xvals[-1]
+        ymin, ymax = yvals[0], yvals[-1]
+        result = image[xmin:xmax, ymin:ymax]
+        return result
+
+    mask1 = mask(img_pano_1)
+    mask2 = mask(img_pano_2)
+    maskboth = mask1 + mask2
+    lefthalf = np.divide(img_pano_1, maskboth)
+    lefthalf = np.nan_to_num(lefthalf)
+    righthalf = np.divide(img_pano_2, maskboth)
+    righthalf = np.nan_to_num(righthalf)
+    img_pano_masked = (lefthalf + righthalf).astype("uint8")
+    #plt.imshow(cv2.cvtColor(lefthalf, cv2.COLOR_BGR2RGB)), plt.show()
+    cropped = crop(img_pano_masked)
+    plt.imshow(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)), plt.show()
+    print("test")
 
     # =====  use a backward warping algorithm to warp the source
     # 1/ to do so, we first create the inverse transform; 2/ use bilinear interpolation for resampling
@@ -357,5 +405,5 @@ if __name__ == "__main__":
     img_panorama = stitch_images(img_1=img_1, img_2=img_2)
 
     # ===== save panorama image
-    #cv2.imwrite(filename=path_file_image_result, img=(img_panorama).clip(0.0, 255.0).astype(np.uint8))
+    cv2.imwrite(filename=path_file_image_result, img=(img_panorama).clip(0.0, 255.0).astype(np.uint8))
 
