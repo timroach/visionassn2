@@ -348,8 +348,6 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     #plt.imshow(cv2.cvtColor(lefthalf, cv2.COLOR_BGR2RGB)), plt.show()
     cropped = crop(img_pano_masked)
     plt.imshow(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)), plt.show()
-    print("test")
-
     # =====  use a backward warping algorithm to warp the source
     # 1/ to do so, we first create the inverse transform; 2/ use bilinear interpolation for resampling
     # to be completed ...
@@ -360,7 +358,7 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     # ===== find the best bounding box for the resulting stitched image so that it will contain all pixels from 2 original images
     # to be completed ...
 
-    return img_panorama
+    return cropped
 
 def stitch_images(img_1, img_2):
     '''
