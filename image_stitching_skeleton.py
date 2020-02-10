@@ -208,29 +208,19 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     :param img_2:
     :return img_panorama: resulting panorama image
     '''
+    # Get inverse warping matrix
     invH = np.linalg.inv(H_1)
     img_dims = img_1.shape
+    # Create blank canvas
     img_panorama = np.zeros(shape=(3 * img_dims[0], 3 * img_dims[1], img_dims[2]), dtype=np.uint8)
     img_pano_height = img_panorama.shape[1]
     img_pano_width = img_panorama.shape[0]
+    # Make two copies of canvas for masking
     img_pano_1 = img_panorama.copy()
     img_pano_2 = img_panorama.copy()
+    # Copy image 2 to a blank canvas (no warp)
     img_pano_2[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_2
     warpedpixels = {}
-    def one2fourbilin(pixel, rgb):
-        i = math.floor(pixel[0])
-        j = math.floor(pixel[1])
-        dx = pixel[0] - i
-        dy = pixel[1] - j
-        ll = (dx * dy) * rgb
-        lr = ((1 - dx)*dy) * rgb
-        ur = ((1 - dx) * (1 - dy)) * rgb
-        ul = (dx * (1 - dy)) * rgb
-        locations = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]
-        locint = np.array(locations, dtype=int)
-        pixvalues = np.array([ll, lr, ur, ul])
-        result = np.column_stack((locint, pixvalues))
-        return result
 
     # Compute pixel's color from it's 4 neighbors
     # via bilinear interpolation
@@ -253,8 +243,7 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
 
     img_1_width = img_1.shape[0]
     img_1_height = img_1.shape[1]
-    # for xindex, row in enumerate(img_panorama):
-    #    for yindex, pixel in enumerate(row):
+    # for all relevant pixels in the canvas...
     for xindex in range(-img_1_width, 2 * img_1_width):
         for yindex in range(-img_1_height, 2 * img_1_height):
             # pano coords in homogenous space
@@ -279,43 +268,7 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
                 targetpixel = img_panorama[xindex + img_1_width][yindex + img_1_height]
                 # Alter color of current pixel in pano, + offset
                 img_pano_1[xindex + img_1_height][yindex + img_1_width] += colorvalue.astype(np.uint8)
-                #print("test")
-            # else:
-                # print("out of range")
-    '''
-    for xindex, row in enumerate(img_1):
-        for yindex, pixel in enumerate(row):
-            pixhomo = homog([xindex, yindex])
-            newlochomo = invH @ pixhomo
-            newloc = linear(newlochomo)
-            bilinto4 = one2fourbilin(newloc, pixel)
-            # locpixlist = [newloc, pixel]
-            for line in bilinto4:
-                loc = line[0:2].astype(int)
-                loctup = (loc[0], loc[1])
-                rgb = line[2:]
-                if loctup not in warpedpixels:
-                    warpedpixels[loctup] = [rgb]
-                else:
-                    warpedpixels[loctup].append(rgb)
-            #print("test")
-    warpedmean = {}
-    for fracpixels in warpedpixels.items():
-        unpacked = fracpixels[1]
-        if len(unpacked) > 1:
-            stacked = np.stack(unpacked, axis=1)
-            stacked = stacked.mean(axis=1)
-            warpedmean[fracpixels[0]] = stacked
-        else:
-            aslist = unpacked[0].tolist()
-            warpedmean[fracpixels[0]] = np.array(aslist)
-        #print("test")
-    for coords, pixel in warpedmean.items():
-        x = coords[0]
-        y = coords[1]
-        img_panorama[x,y] = pixel
-        print("test")
-    '''
+
     # Masking
     def mask(image):
         result = np.zeros(image.shape)
