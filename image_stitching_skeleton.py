@@ -211,7 +211,23 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
         pixvalues = np.array([ll, lr, ur, ul])
         result = np.column_stack((locint, pixvalues))
         return result
-    def four2onebilin(pixel, rgb):
+
+    def four2onebilin(pixel, image):
+        i = math.floor(pixel[0])
+        j = math.floor(pixel[1])
+        dx = pixel[0] - i
+        dy = pixel[1] - j
+        fll = image[i][j]
+        flr = image[i + 1][j]
+        fur = image[i + 1][j + 1]
+        ful = image[i][j + 1]
+        ll = (1 - dx) * (1 - dy) * fll
+        lr = dx *(1 - dy) * flr
+        ur = dx * flr
+        ul = (1 - dx) * dy * flr
+        totalcolor = ll + lr + ur + ul
+        result = []
+        return totalcolor
 
     img_1_width = img_1.shape[0]
     img_1_height = img_1.shape[1]
@@ -222,11 +238,12 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
             pixsrc = linear(pixhomowarped)
             srcx = pixsrc[0]
             srcy = pixsrc[1]
-            if 0 < srcx < img_1_width and 0 < srcy < img_1_width:
-
-                print("test")
-            else:
-                print("out of range")
+            if 0 < srcx < (img_1_width - 1) and 0 < srcy < (img_1_height - 1):
+                colorvalue = four2onebilin([srcx, srcy], img_1)
+                img_panorama[xindex][yindex] = colorvalue
+                #print("test")
+            # else:
+                # print("out of range")
     '''
     for xindex, row in enumerate(img_1):
         for yindex, pixel in enumerate(row):
