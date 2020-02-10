@@ -64,13 +64,15 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
         '''
         A = []
         for i in range(0, len(pointslist)):
-            x, y = pointslist[i][0][0], pointslist[i][0][1]
-            u, v = pointslist[i][1][0], pointslist[i][1][1]
-            A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
-            A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+            x1, y1 = pointslist[i][0][0], pointslist[i][0][1]
+            xp1, yp1 = pointslist[i][1][0], pointslist[i][1][1]
+            # A.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
+            # A.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+            A.append([-x1, -y1, -1, 0, 0, 0, x1*xp1, y1*xp1, xp1])
+            A.append([0, 0, 0, -x1, -y1, -1, x1*yp1, y1*yp1, yp1])
         A = np.asarray(A)
         U, S, Vh = np.linalg.svd(A)
-        L = Vh[-1, :] / Vh[-1, -1]
+        L = Vh[-1,:]
         H = L.reshape(3, 3)
         return H
 
@@ -195,6 +197,8 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
     invH = np.linalg.inv(H_1)
     img_dims = img_1.shape
     img_panorama = np.zeros(shape=(3 * img_dims[0], 3 * img_dims[1], img_dims[2]), dtype=np.uint8)
+    img_pano_height = img_panorama.shape[1]
+    img_pano_width = img_panorama.shape[0]
     # img_panorama[img_dims[0]:img_dims[0]*2, img_dims[1]:img_dims[1]*2] = img_1
     warpedpixels = {}
     def one2fourbilin(pixel, rgb):
@@ -221,26 +225,44 @@ def ex_warp_blend_crop_image(img_1, H_1, img_2):
         flr = image[i + 1][j]
         fur = image[i + 1][j + 1]
         ful = image[i][j + 1]
-        ll = (1 - dx) * (1 - dy) * fll
-        lr = dx *(1 - dy) * flr
-        ur = dx * flr
-        ul = (1 - dx) * dy * flr
+        ll = ((1 - dx) * (1 - dy)) * fll
+        lr = (dx *(1 - dy)) * flr
+        ur = dx * fur
+        ul = ((1 - dx) * dy) * ful
         totalcolor = ll + lr + ur + ul
         result = []
         return totalcolor
 
     img_1_width = img_1.shape[0]
     img_1_height = img_1.shape[1]
-    for xindex, row in enumerate(img_panorama):
-        for yindex, pixel in enumerate(row):
+    # for xindex, row in enumerate(img_panorama):
+    #    for yindex, pixel in enumerate(row):
+    for xindex in range(-img_1_width, 2 * img_1_width):
+        for yindex in range(-img_1_height, 2 * img_1_height):
+            # pano coords in homogenous space
             pixhomo = homog([xindex, yindex])
+            # Source coords in img_1 (homogenous)
             pixhomowarped = invH @ pixhomo
+            scaling = np.array(([1, 0, 0],
+                                    [0, 1, 0],
+                                    [0, 0, 1]))
+            pixhomowarped1 = scaling @ pixhomo
+            # Linear coords in img_1
             pixsrc = linear(pixhomowarped)
+            # x coord in img_1
             srcx = pixsrc[0]
+            # y coord in img_1
             srcy = pixsrc[1]
+            #print("test")
+            # If source coords are inside area of img_1:
             if 0 < srcx < (img_1_width - 1) and 0 < srcy < (img_1_height - 1):
+                # Interpolate value from 4 nearest pixels
                 colorvalue = four2onebilin([srcx, srcy], img_1)
-                img_panorama[xindex][yindex] = colorvalue
+                # Target pixel should be empty
+                targetcoords = [xindex + img_1_width, yindex + img_1_height]
+                targetpixel = img_panorama[xindex + img_1_width][yindex + img_1_height]
+                # Alter color of current pixel in pano, + offset
+                img_panorama[xindex + img_1_height][yindex + img_1_width] = colorvalue
                 #print("test")
             # else:
                 # print("out of range")
