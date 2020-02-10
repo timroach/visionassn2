@@ -4,18 +4,20 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-
+# Converts a point to homogeneous coords
 def homog(point):
     appended = point.copy()
     appended.append(1)
     npvec = np.array(appended)
     return npvec
 
+# Converts point from homogeneous coords
 def linear(homogpoint):
     if homogpoint[2] == 0:
-        homogpoint[2] = 0.0000001
-    x = homogpoint[0] / homogpoint[2]
-    y = homogpoint[1] / homogpoint[2]
+        x, y = 0, 0
+    else:
+        x = homogpoint[0] / homogpoint[2]
+        y = homogpoint[1] / homogpoint[2]
     return np.array([x, y])
 
 def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inliers=0.85, threshold_reprojtion_error=3, max_num_trial=1000):
@@ -27,6 +29,7 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
     :param max_num_trial: the maximum number of trials to do take sample and do testing to find the best homography matrix
     :return best_H: the best found homography matrix
     '''
+    # Find homography matrix for given 4 x,y points, passed as nested lists
     def find4homo(pointslist):
         '''
         point1 = pointslist[0]
@@ -85,7 +88,7 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
             predicted = H @ p1homog
             # Standard coords of predicted point
             standardpredicted = linear(predicted)
-            difference = point2 - standardpredicted
+            # Compute error between predicted and point2
             error = np.linalg.norm(point2 - standardpredicted)
             if error < threshold_reprojtion_error:
                 inliernum += 1
@@ -103,13 +106,17 @@ def ex_find_homography_ransac(list_pairs_matched_keypoints, threshold_ratio_inli
         listfour = [randomfour[0].tolist(), randomfour[1].tolist(), randomfour[2].tolist(), randomfour[3].tolist()]
         # Calculate homography matrix from 4 pairs of points
         trialH = find4homo(randomfour.tolist())
-        totalinliners = 0
+        # return total number of inliners for given trialH matrix on keypoints
         inliners = findinliners(trialH, list_pairs_matched_keypoints)
+        # If number of inliners meets threshold...
         if inliners / len(list_pairs_matched_keypoints) > threshold_ratio_inliers:
+            # Add H to the array of potential best H
             H_array.append([trialH, inliners])
-        totalinliners += inliners
+    # Convert list of lists to array
     H_arr_np = np.array(H_array)
+    # Sort array by inliner column
     H_arraysorted = H_arr_np[H_arr_np[:,1].argsort()]
+    # Choose last entry (largest number of inliners)
     best_H = H_arraysorted[-1][0]
     return best_H
 
@@ -151,10 +158,8 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
     # For each keypoint and description in image 1...
     for outerindex, (outerpoint, outerdesc) in enumerate(zip(img_1_keypoints, img_1_desc)):
         diffmatrix = outerdesc - img_2_desc
-        testdist = np.linalg.norm(outerdesc - img_2_desc[0])
         distances = np.linalg.norm(diffmatrix, axis=1)
         kpwithdistance = np.column_stack((img_2_keypoints, distances, range(0, len(img_2_keypoints))))
-        # testsort = np.sort(kpwithdistance, axis=0)
         sortwdist = kpwithdistance[kpwithdistance[:,1].argsort()]
         toptwo = sortwdist[:2]
         if len(toptwo) > 1:
@@ -163,8 +168,6 @@ def ex_extract_and_match_feature(img_1, img_2, ratio_robustness=0.7):
             seconddist = toptwo[1][1]
             if firstdist < seconddist * ratio_robustness:
                 allpoints.append([[outerpoint, outerindex], toptwo[0]])
-
-
 
     bestpairs = []
     for tuple in allpoints:
